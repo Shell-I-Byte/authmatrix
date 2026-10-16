@@ -1,0 +1,114 @@
+name: release-gates
+'on':
+  push:
+    branches: ['**']
+    tags: ['v1.*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.26.9', '1.27.2']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - run: go test -count=1 ./...
+      - run: go test -race -count=1 ./...
+      - run: go test -shuffle=on -count=3 ./...
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go mod verify
+      - run: python3 tools/independent_cli_probes.py
+      - name: Offline positive-control schema regression
+        run: |
+          go build -trimpath -buildvcs=false -o /tmp/authmatrix-schema ./cmd/authmatrix
+          python3 tests/positive_control_cli_probes.py /tmp/authmatrix-schema
+          python3 tests/numeric_schema_cli_probes.py /tmp/authmatrix-schema
+      - name: Synthetic FIFO race regression (Linux only)
+        run: |
+          go build -trimpath -buildvcs=false -o /tmp/authmatrix-audit ./cmd/authmatrix
+          python3 tests/fifo_swap_probe.py /tmp/authmatrix-audit --count 100 --timeout 0.5
+      - name: Local output-parent swap regression (Linux only)
+        run: |
+          go build -trimpath -buildvcs=false -o /tmp/authmatrix-parent ./cmd/authmatrix
+          python3 tests/parent_swap_output_probe.py /tmp/authmatrix-parent --count 350
+      - name: Synthetic output-ancestor swap regression (Linux only)
+        run: |
+          go build -trimpath -buildvcs=false -o /tmp/authmatrix-ancestor ./cmd/authmatrix
+          python3 tests/ancestor_swap_output_probe.py /tmp/authmatrix-ancestor --count 200
+      - run: python3 tools/verify_release_manifest.py --source .
+      - name: Verify full sealed source archive before extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/seal_release_source.py /tmp/authmatrix-ci-source.zip --source .
+          python3 tools/verify_source_archive.py /tmp/authmatrix-ci-source.zip --root "$(basename "$PWD")"
+          python3 tools/test_verify_source_archive.py
+  analyzers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+  native:
+    # Qualify on PRs, not only after a release tag is already created.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04-arm
+            expected_os: linux
+            expected_arch: arm64
+            python: python3
+          - os: macos-15
+            expected_os: darwin
+            expected_arch: arm64
+            python: python3
+          - os: windows-2025
+            expected_os: windows
+            expected_arch: amd64
+            python: python
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Native runner identity
+        shell: bash
+        env:
+          EXPECTED_OS: ${{ matrix.expected_os }}
+          EXPECTED_ARCH: ${{ matrix.expected_arch }}
+        run: |
+          set -euo pipefail
+          test "$(go env GOOS)" = "$EXPECTED_OS"
+          test "$(go env GOARCH)" = "$EXPECTED_ARCH"
+          test "$(go env GOVERSION)" = "go1.27.2"
+      - run: go test -count=1 ./...
+      - run: go test -race -count=1 ./...
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go mod verify
+      - run: go run ./cmd/authmatrix version
+      - name: Portable positive/negative CLI acceptance on actual native runner
+        shell: bash
+        run: "${{ matrix.python }} tests/native_portable_smoke.py"

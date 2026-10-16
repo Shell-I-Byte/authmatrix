@@ -1,0 +1,10 @@
+{
+  "schema": "authmatrix.matrix/v1",
+  "authorization": {"approved": true, "origin": "synthetic", "scope": "local-fixture"},
+  "cases": [
+    {"id": "owner-allowed", "kind": "horizontal", "expected": "allow", "observed_status": 200},
+    {"id": "neighbor-denied", "kind": "horizontal", "expected": "deny", "observed_status": 403},
+    {"id": "admin-route", "kind": "vertical", "expected": "deny", "observed_status": 200},
+    {"id": "unknown-resource", "kind": "unauthenticated", "expected": "deny", "observed_status": 404}
+  ]
+}

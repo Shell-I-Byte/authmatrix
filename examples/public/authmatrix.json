@@ -1,0 +1,17 @@
+{
+  "schema": "authmatrix.matrix/v1",
+  "authorization": {
+    "approved": true,
+    "origin": "synthetic",
+    "scope": "LOCAL"
+  },
+  "cases": [
+    {
+      "id": "local",
+      "kind": "horizontal",
+      "expected": "deny",
+      "observed_status": 403,
+      "positive_control_confirmed": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema",
+ "title":"AuthMatrix authorized offline observation matrix v1",
+ "type":"object", "additionalProperties":false,
+ "required":["schema","authorization","cases"],
+ "properties":{
+  "schema":{"const":"authmatrix.matrix/v1"},
+  "authorization":{"type":"object","additionalProperties":false,"required":["approved","origin","scope"],"properties":{
+   "approved":{"const":true},"origin":{"enum":["synthetic","explicitly-authorized"]},"scope":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_.:-]+$"}
+  }},
+  "cases":{"type":"array","minItems":1,"maxItems":1000,"items":{"type":"object","additionalProperties":false,
+   "required":["id","kind","expected","observed_status"],"properties":{
+     "id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_.:-]+$"},
+     "kind":{"enum":["horizontal","vertical","unauthenticated"]},"expected":{"enum":["allow","deny"]},
+     "observed_status":{"type":"integer","minimum":100,"maximum":599},
+     "positive_control_confirmed":{"type":"boolean"}
+   }
+  }}
+ }
+}
